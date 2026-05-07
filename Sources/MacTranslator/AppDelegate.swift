@@ -65,9 +65,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func triggerTranslate() {
+        // 每次触发都检查一次权限，没权限直接提示用户
+        if !AXIsProcessTrusted() {
+            showPopup(withText: "（辅助功能权限未开启）",
+                      translation: "请到「系统设置 → 隐私与安全性 → 辅助功能」开启 MacTranslator，然后退出 App 重启。",
+                      originalText: "")
+            return
+        }
+
         guard let text = SelectionReader.currentSelection()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty else {
-            showPopup(withText: "（未读取到选中文本，请先选中文字再按快捷键）", translation: nil, originalText: "")
+            showPopup(withText: "（未读取到选中文本）",
+                      translation: "请先选中文字再按快捷键。如果权限刚授予，请退出 App 重启一次（ad-hoc 签名的 App 权限每次重新打包都需要重授）。",
+                      originalText: "")
             return
         }
         showPopup(withText: text, translation: nil, originalText: text)

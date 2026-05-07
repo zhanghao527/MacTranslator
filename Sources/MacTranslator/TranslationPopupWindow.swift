@@ -22,7 +22,7 @@ final class TranslationPopupWindow {
             }))
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 380, height: 220),
-                styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+                styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
             )
@@ -36,6 +36,12 @@ final class TranslationPopupWindow {
             panel.contentViewController = hosting
             panel.backgroundColor = NSColor.windowBackgroundColor
             panel.hasShadow = true
+            panel.isOpaque = false
+            panel.appearance = NSApp.effectiveAppearance
+            // 圆角
+            panel.contentView?.wantsLayer = true
+            panel.contentView?.layer?.cornerRadius = 10
+            panel.contentView?.layer?.masksToBounds = true
             // 切换空间时跟随，关闭时不把窗口进窗口列表
             panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient]
             self.window = panel
@@ -117,22 +123,7 @@ struct PopupView: View {
     var onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Mac Translator")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button(action: copyTranslation) {
-                    Image(systemName: "doc.on.doc")
-                }
-                .buttonStyle(.borderless)
-                .help("复制译文")
-                .disabled(viewModel.translation == nil || viewModel.isLoading)
-            }
-
-            Divider()
-
+        ZStack(alignment: .topTrailing) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(viewModel.source)
@@ -154,9 +145,27 @@ struct PopupView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                // 给右上角浮动按钮留点空间
+                .padding(.trailing, 20)
+            }
+
+            // 右上角浮动的复制按钮，仅在有译文时出现
+            if let _ = viewModel.translation, !viewModel.isLoading {
+                Button(action: copyTranslation) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .padding(6)
+                        .background(
+                            Circle().fill(Color.secondary.opacity(0.12))
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("复制译文")
+                .padding(10)
             }
         }
-        .padding(14)
         .frame(width: 380, height: 220)
         // Esc 关闭
         .background(

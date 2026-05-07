@@ -19,22 +19,30 @@ enum SelectionReader {
         } ?? []
 
         let oldChangeCount = pasteboard.changeCount
-        pasteboard.clearContents()
 
-        // 发送 ⌘ + C
+        // 发送 ⌘ + C 给前台 App
         sendCommandC()
 
-        // 等待剪贴板更新，最多 300ms
-        let deadline = Date().addingTimeInterval(0.3)
+        // 等待剪贴板 changeCount 变化，最多 400ms
+        let deadline = Date().addingTimeInterval(0.4)
+        var changed = false
         while Date() < deadline {
-            if pasteboard.changeCount != oldChangeCount + 1 && pasteboard.changeCount != oldChangeCount {
-                // changeCount 变过了
+            if pasteboard.changeCount != oldChangeCount {
+                changed = true
                 break
             }
             Thread.sleep(forTimeInterval: 0.02)
         }
 
         let copied = pasteboard.string(forType: .string)
+
+        if !changed {
+            NSLog("[MacTranslator] SelectionReader: clipboard changeCount 未变化 — 很可能辅助功能权限未生效，或前台 App 不响应 ⌘C")
+        } else if copied == nil || copied?.isEmpty == true {
+            NSLog("[MacTranslator] SelectionReader: 剪贴板变化了但取不到字符串")
+        } else {
+            NSLog("[MacTranslator] SelectionReader: 读取到 \(copied!.count) 字")
+        }
 
         // 还原剪贴板
         pasteboard.clearContents()
@@ -49,7 +57,8 @@ enum SelectionReader {
             pasteboard.writeObjects(restored)
         }
 
-        return copied
+        // 没检测到复制动作就返回 nil，避免把旧剪贴板内容当成"选中文本"
+        return changed ? copied : nil
     }
 
     private static func sendCommandC() {

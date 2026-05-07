@@ -54,8 +54,20 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 </plist>
 PLIST
 
-echo "[4/4] Ad-hoc 代码签名"
-codesign --force --deep --sign - "${APP_DIR}" >/dev/null 2>&1 || true
+echo "[4/4] 代码签名"
+SIGN_IDENTITY="MacTranslator Dev"
+if security find-identity -v -p codesigning | grep -q "${SIGN_IDENTITY}"; then
+    echo "    使用本机开发证书：${SIGN_IDENTITY}"
+    codesign --force --deep \
+        --sign "${SIGN_IDENTITY}" \
+        --identifier "${BUNDLE_ID}" \
+        --options runtime \
+        "${APP_DIR}" >/dev/null
+else
+    echo "    ⚠️  未找到 '${SIGN_IDENTITY}' 证书，退化为 ad-hoc 签名（重新编译后 TCC 权限会失效）"
+    echo "    建议先运行一次：./scripts/create-signing-cert.sh"
+    codesign --force --deep --sign - "${APP_DIR}" >/dev/null 2>&1 || true
+fi
 
 echo "✅ 打包完成：${APP_DIR}"
 
