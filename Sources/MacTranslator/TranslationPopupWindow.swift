@@ -5,6 +5,11 @@ final class TranslationPopupWindow {
     private var window: NSPanel?
     private let viewModel = PopupViewModel()
 
+    /// 监听「在本 App 之外」的点击，用于自动隐藏
+    private var globalClickMonitor: Any?
+    /// 监听其他 App 激活事件，作为保险
+    private var appActivationObserver: NSObjectProtocol?
+
     func show(source: String, translation: String?, originalText: String) {
         viewModel.source = source
         viewModel.translation = translation
@@ -12,7 +17,9 @@ final class TranslationPopupWindow {
         viewModel.isLoading = translation == nil
 
         if window == nil {
-            let hosting = NSHostingController(rootView: PopupView(viewModel: viewModel))
+            let hosting = NSHostingController(rootView: PopupView(viewModel: viewModel, onClose: { [weak self] in
+                self?.hide()
+            }))
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 380, height: 220),
                 styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
@@ -22,23 +29,33 @@ final class TranslationPopupWindow {
             panel.titleVisibility = .hidden
             panel.titlebarAppearsTransparent = true
             panel.isMovableByWindowBackground = true
-            panel.isFloatingPanel = true
-            panel.level = .floating
+            panel.isFloatingPanel = false
+            // 普通级别：其他 App 的窗口可以正常覆盖它
+            panel.level = .normal
             panel.hidesOnDeactivate = false
             panel.contentViewController = hosting
             panel.backgroundColor = NSColor.windowBackgroundColor
             panel.hasShadow = true
+            // 切换空间时跟随，关闭时不把窗口进窗口列表
+            panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient]
             self.window = panel
         }
 
         positionWindowNearMouse()
         window?.orderFrontRegardless()
+        startAutoDismissMonitors()
     }
+
+    func hide() {
+        stopAutoDismissMonitors()
+        window?.orderOut(nil)
+    }
+
+    // MARK: - 位置
 
     private func positionWindowNearMouse() {
         guard let window = window else { return }
         let mouse = NSEvent.mouseLocation
-        // 放在鼠标右下方一点点
         let size = window.frame.size
         var origin = NSPoint(x: mouse.x + 12, y: mouse.y - size.height - 12)
 
@@ -48,6 +65,43 @@ final class TranslationPopupWindow {
             origin.y = min(max(origin.y, vf.minY + 8), vf.maxY - size.height - 8)
         }
         window.setFrameOrigin(origin)
+    }
+
+    // MARK: - 自动隐藏
+
+    private func startAutoDismissMonitors() {
+        stopAutoDismissMonitors()
+
+        // 其他 App 范围内按下鼠标 → 隐藏面板
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] _ in
+            self?.hide()
+        }
+
+        // 有其他 App 被激活 → 隐藏面板（保险）
+        appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let self = self else { return }
+            let activated = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            // 如果激活的是我们自己，不隐藏
+            if activated?.bundleIdentifier == Bundle.main.bundleIdentifier { return }
+            self.hide()
+        }
+    }
+
+    private func stopAutoDismissMonitors() {
+        if let m = globalClickMonitor {
+            NSEvent.removeMonitor(m)
+            globalClickMonitor = nil
+        }
+        if let obs = appActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(obs)
+            appActivationObserver = nil
+        }
     }
 }
 
@@ -60,6 +114,7 @@ final class PopupViewModel: ObservableObject {
 
 struct PopupView: View {
     @ObservedObject var viewModel: PopupViewModel
+    var onClose: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -103,6 +158,12 @@ struct PopupView: View {
         }
         .padding(14)
         .frame(width: 380, height: 220)
+        // Esc 关闭
+        .background(
+            Button("") { onClose() }
+                .keyboardShortcut(.escape, modifiers: [])
+                .opacity(0)
+        )
     }
 
     private func copyTranslation() {
