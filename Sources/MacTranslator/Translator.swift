@@ -22,7 +22,7 @@ final class Translator {
             throw TranslatorError.unavailable
         }
         let (sl, tl) = detectDirection(text)
-        let sourceLang: Locale.Language? = (sl == "zh-CN") ? Locale.Language(identifier: "zh-Hans") : nil
+        let sourceLang = Locale.Language(identifier: sl == "zh-CN" ? "zh-Hans" : "en")
         let targetLang = Locale.Language(identifier: tl == "en" ? "en" : "zh-Hans")
         return try await withTimeout(seconds: 8) {
             try await SystemTranslator.shared.translate(
@@ -38,6 +38,6 @@ final class Translator {
                 return ("zh-CN", "en")
             }
         }
-        return ("auto", "zh-CN")
+        return ("en", "zh-CN")
     }
 }
